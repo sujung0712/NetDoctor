@@ -1,9 +1,9 @@
 # NetDoctor QA 검증 보고서 (QA Report)
 
 - **작성 일시**: 2026-11-26
-- **대상 프로젝트**: NetDoctor (`netdoctor@0.1.0`, Base Version)
+- **대상 프로젝트**: NetDoctor (`netdoctor@0.1.0`, `feature/report-download`)
 - **검증 담당**: QA Agent
-- **최종 판정**: **PASS (자동화 단위·정확성·통합·보안·저장실패 테스트 57/57 통과, Lint·TypeScript·프로덕션 빌드 0 오류)**
+- **최종 판정**: **PASS (자동화 단위·정확성·통합·보안·저장실패·보고서다운로드 테스트 72/72 통과, Lint·TypeScript·프로덕션 빌드 0 오류)**
 
 ---
 
@@ -107,12 +107,12 @@
 
 ---
 
-## 5. Git 베이스 버전 범위 준수 점검 (Scope Check)
+## 5. Git 브랜치 범위 준수 점검 (Scope Check)
 
-베이스 버전은 핵심 기능에 집중하고 확장 기능은 별도 feature 브랜치로 분리한다는 정책을 코드 및 통합 테스트(Flow E)로 검증하였습니다.
+베이스 버전은 핵심 기능에 집중하고 확장 기능은 별도 feature 브랜치로 분리하는 정책을 코드 및 통합 테스트(Flow E)로 검증하였습니다.
 
-- **장애 보고서 파일 다운로드 (`feature/report-download`)**: 베이스 버전에 파일 다운로드 버튼(`다운로드`/`내보내기`/`<a download>`)이 조기 구현되지 않았으며, 보고서 미리보기 및 클립보드 복사 기능만 제공됨을 확인.
-- **고급 진단 결과 비교 (`feature/diagnosis-comparison`)**: 베이스 버전에 진단 결과 비교 UI/컨트롤이 조기 구현되지 않았으며, 보고서 페이지 상단 로드맵 배너를 통해 향후 확장 브랜치 예정 사항으로만 안내됨을 확인.
+- **장애 보고서 파일 다운로드 (`feature/report-download`)**: **본 브랜치(`feature/report-download`)에서 구현 및 검증 완료**. 보고서 미리보기·클립보드 복사 기존 기능을 보존하면서 Markdown(`.md`) 및 일반 텍스트(`.txt`) 클라이언트 파일 다운로드 기능, 안전한 파일명 생성, UTF-8 BOM Blob 생성, Object URL 해제 및 타이머 정리까지 15건의 전용 테스트 및 Flow E 회귀 테스트로 검증함.
+- **고급 진단 결과 비교 (`feature/diagnosis-comparison`)**: **여전히 연기(Deferred) 상태 유지**. 본 브랜치에도 진단 결과 비교 UI/컨트롤(`진단 비교`·`결과 비교`·`비교하기`)이 조기 구현되지 않았으며, 보고서 페이지 상단 로드맵 배너를 통해 추후 별도 feature 브랜치 예정 사항으로만 안내됨을 확인.
 
 ---
 
@@ -204,3 +204,46 @@
 | `src/test/security-xss.test.tsx` | 8 | PASS | 2,999ms |
 | `src/test/integration.test.tsx` | 5 | PASS | 7,177ms |
 | **합계** | **57** | **ALL PASS** | **11.53s** |
+
+---
+
+## 9. `feature/report-download` 기능 구현 및 최종 QA 검증
+
+- **검증 일시**: 2026-11-26
+- **대상 브랜치**: `feature/report-download`
+- **실행 환경**: Windows, Node.js `v24.22.2`, npm `11.19.1`
+- **신규/수정 QA 파일**:
+  - `src/test/report-download.test.tsx` *(신규, 15건: 단위·보안 11건 + UI 통합·타이머 정리 4건)*
+  - `src/test/integration.test.tsx` *(Flow E 범위 검증 갱신: `.md 다운로드`/`.txt 다운로드` 동작 검증 추가, `feature/diagnosis-comparison` 미구현 유지 검증)*
+
+### 9.1 QA 게이트 실행 결과
+
+| 검증 명령어 | 결과 | 상세 출력 |
+| :--- | :---: | :--- |
+| `npm run test` | **PASS** | **6개 테스트 파일 / 72/72 테스트 통과** (`12.37s`) — 기존 57건 통과 유지 + 신규 `src/test/report-download.test.tsx` 15건 통과 |
+| `npm run lint` | **PASS** | 오류 `0건`, 경고 `0건` (종료 코드 `0`) |
+| `npx tsc --noEmit -p tsconfig.app.json` | **PASS** | 타입 오류 `0건` (종료 코드 `0`) |
+| `npm run build` | **PASS** | `tsc -b && vite build` 성공 (`2211 modules transformed`, `6.58s`, `dist/index.html` 0.53 kB / gzip 0.42 kB, `dist/assets/index-DPY249dS.css` 34.33 kB / gzip 6.68 kB, `dist/assets/index-t_VP6ZEZ.js` 713.62 kB / gzip 215.68 kB) |
+
+### 9.2 테스트 파일별 상세 결과 (`npm run test` — 72/72 PASS)
+
+| 테스트 파일 | 케이스 수 | 결과 | 소요 시간 |
+| :--- | :---: | :---: | :---: |
+| `src/engine/engine.test.ts` | 17 | PASS | 27ms |
+| `src/test/diagnosis-accuracy.test.ts` | 17 | PASS | 41ms |
+| `src/test/report-download.test.tsx` *(신규)* | 15 | PASS | 871ms |
+| `src/test/storage-failure.test.tsx` | 10 | PASS | 2,603ms |
+| `src/test/security-xss.test.tsx` | 8 | PASS | 3,255ms |
+| `src/test/integration.test.tsx` *(Flow E 갱신)* | 5 | PASS | 7,679ms |
+| **합계** | **72** | **ALL PASS** | **12.37s** |
+
+### 9.3 `feature/report-download` 기능·보안·리소스 정리 체크리스트
+
+- [x] **안전한 파일명 생성 (`buildSafeReportFilename` & `downloadReportContent`)**: 한글 제목 보존(`netdoctor-report-사내-위키-접속-불가-20261126.md`/`.txt`), 경로 순회(`../../etc/passwd`) 제거, Windows 금지 문자(`< > : " / \ | ? *`)·제어 문자·HTML 태그(`<script>alert(1)</script>`) 제거, Windows 예약 장치명(`CON`, `NUL`, `COM1`, `PRN`, `AUX`, `LPT1`) 회피, 장문 제목 50자 절삭 및 기호 전용 제목 폴백(`faultType` → `incident`) 확인.
+- [x] **UTF-8 BOM 및 한글 무결성 (`createReportBlob`)**: `text/markdown;charset=utf-8` / `text/plain;charset=utf-8` MIME 타입, 단일 UTF-8 BOM(`0xEF 0xBB 0xBF`) 부여(중복 방지 포함), 한글 텍스트 및 바이트 크기 일치, 빈 문자열/공백 전용 문자열 `null` 반환 확인.
+- [x] **빈 보고서 차단 및 브라우저 미지원 방어**: 공백 보고서 및 `null`/`undefined` 이력 전달 시 `URL.createObjectURL` 미호출 차단, `URL.createObjectURL` 미지원 환경에서 예외 전파 없이 `{ ok: false, error }` 안전 반환 확인.
+- [x] **Object URL 및 임시 `<a>` DOM 수명주기 정리 (`finally`)**: 정상 다운로드뿐 아니라 `HTMLAnchorElement.prototype.click` 예외 발생 시에도 임시 `<a download>` DOM 제거 및 `URL.revokeObjectURL` 호출 보장 확인.
+- [x] **다운로드 파일 본문 XSS 무력화**: `<script>alert(1)</script>`, `<img src=x onerror=alert(1)>`, `javascript:` 페이로드가 `.md`/`.txt` Blob 본문에서 `&lt;script&gt;`, `&lt;img ...&gt;`, `javascript_blocked:`로 완전 무력화됨을 확인.
+- [x] **UI 통합 및 접근성 (`ReportPage` / `<App />`)**: `.md 다운로드`·`.txt 다운로드` 동작, `aria-live="polite"` 파일명 알림, 기존 `보고서 복사` 보존, `URL.createObjectURL` 예외 시 `role="alert"` danger `AlertBanner` 표시 및 복구 확인.
+- [x] **언마운트 타이머 누수 방지 (PR #1 Minor #4)**: `보고서 복사`(3,000ms) 및 `.md 다운로드`(3,500ms) 트리거 후 `<ReportPage />` 언마운트 시 `window.clearTimeout`이 두 타이머 ID 모두에 정확히 호출됨을 확인.
+- [x] **결함 발견 여부**: 구현 결함 **0건** (Agent A/B 코드 수정 불필요).
