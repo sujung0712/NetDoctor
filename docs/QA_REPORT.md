@@ -3,7 +3,7 @@
 - **작성 일시**: 2026-11-26
 - **대상 프로젝트**: NetDoctor (`netdoctor@0.1.0`, Base Version)
 - **검증 담당**: QA Agent
-- **최종 판정**: **PASS (자동화 단위·통합·보안 테스트 47/47 통과, Lint·TypeScript·프로덕션 빌드 0 오류)**
+- **최종 판정**: **PASS (자동화 단위·정확성·통합·보안·저장실패 테스트 57/57 통과, Lint·TypeScript·프로덕션 빌드 0 오류)**
 
 ---
 
@@ -174,3 +174,33 @@
     - `actions/setup-node@v4` → **`actions/setup-node@v7`** (`v7.1.0`, `runs.using: 'node24'`)
   - 애플리케이션 테스트 매트릭스(`node-version: [20, 24]`), `cache: 'npm'`, 최소 권한(`permissions: contents: read`), 외부 Secret 미사용 원칙은 그대로 유지.
 - **업그레이드 후 원격 재검증 상태**: **Push 대기 중** (다음 `develop` Push 후 PR #1 CI에서 2건의 deprecation 경고 해소 여부 최종 확인 예정).
+
+---
+
+## 8. PR #1 후속 안정화 개선 및 최종 QA 검증 (병렬 Agent A / B)
+
+- **검증 일시**: 2026-11-26
+- **작업 구성 (파일 소유권 완전 분리 병렬 실행)**:
+  - **Agent A (CI 감사 & 백로그 정리)**: `.github/workflows/ci.yml`의 `actions/checkout@v7`·`actions/setup-node@v7`(Node 24 런타임), 앱 `node-version: [20, 24]` 매트릭스, `permissions: contents: read`, 외부 시크릿 미사용 감사 통과(기존 커밋 `a749763` 보존), 및 [docs/AGENT_PLAN.md](./AGENT_PLAN.md) Section 10에 후속 Feature 브랜치 백로그(`feature/report-download`, `feature/diagnosis-comparison` 및 경미 개선 4건) 기록.
+  - **Agent B (데이터 저장 안정성 개선)**:
+    - `src/storage/incidentStorage.ts`: `saveIncidents(records): boolean` 반환 도입(`QuotaExceededError`, `SecurityError`, `localStorage` 미지원 시 `false` 반환); `createIncidentRecord`, `updateIncidentRecord`, `deleteIncidentRecord`, `loadSampleIncidentsIntoStorage`, `clearSampleIncidentsFromStorage`가 저장 실패 시 `null`/`false`/기존 배열을 반환하여 기존 데이터를 무손실 보존.
+    - `src/features/history/HistoryPage.tsx` & `src/features/diagnosis/DiagnosisPage.tsx`: 등록·수정·빠른 상태 전환·삭제·진단 결과 저장 실패 시 성공 배너를 절대 표시하지 않고, `role="alert"` 오류 안내와 기존 데이터 보존 메시지 표시.
+    - `src/test/storage-failure.test.tsx`: 스토리지 단위 테스트 6건 + `<App />` UI 통합 테스트 4건(총 10건 신규 추가).
+
+### 8.1 최종 QA 게이트 실행 결과 (`Node.js v24.22.2` / `npm 11.19.1`)
+
+| 검증 명령어 | 결과 | 상세 출력 |
+| :--- | :---: | :--- |
+| `npm run test` | **PASS** | **5개 테스트 파일 / 57/57 테스트 통과** (`11.53s`) — 기존 47건 유지 + 신규 `src/test/storage-failure.test.tsx` 10건 통과 |
+| `npm run lint` | **PASS** | 오류 `0건`, 경고 `0건` (종료 코드 `0`) |
+| `npx tsc --noEmit -p tsconfig.app.json` | **PASS** | 타입 오류 `0건` (종료 코드 `0`) |
+| `npm run build` | **PASS** | `tsc -b && vite build` 성공 (`2210 modules transformed`, `6.18s`, `dist/index.html` 0.53 kB, CSS 34.08 kB, JS 707.86 kB / gzip 213.96 kB) |
+
+| 테스트 파일 | 케이스 수 | 결과 | 소요 시간 |
+| :--- | :---: | :---: | :---: |
+| `src/engine/engine.test.ts` | 17 | PASS | 27ms |
+| `src/test/diagnosis-accuracy.test.ts` | 17 | PASS | 42ms |
+| `src/test/storage-failure.test.tsx` *(신규)* | 10 | PASS | 2,357ms |
+| `src/test/security-xss.test.tsx` | 8 | PASS | 2,999ms |
+| `src/test/integration.test.tsx` | 5 | PASS | 7,177ms |
+| **합계** | **57** | **ALL PASS** | **11.53s** |
