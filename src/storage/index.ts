@@ -27,3 +27,12 @@ export {
   generateIncidentReport,
   type ReportFormat,
 } from './reportGenerator';
+
+export {
+  REPORT_FILE_EXTENSIONS,
+  REPORT_MIME_TYPES,
+  buildSafeReportFilename,
+  createReportBlob,
+  downloadIncidentReport,
+  downloadReportContent,
+} from './reportDownload';

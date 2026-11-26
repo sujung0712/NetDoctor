@@ -342,17 +342,61 @@ describe('NetDoctor End-to-End UI Integration Flows', () => {
     expect(plainText).toContain('[6. 해결 상태]');
     expect(plainText).not.toContain('## 1. 장애 유형');
 
-    // Verify base version does NOT include file download or advanced diagnosis comparison controls
-    expect(
-      screen.queryByRole('button', { name: /다운로드|내보내기|download|export/i })
-    ).not.toBeInTheDocument();
-    expect(document.querySelector('a[download]')).toBeNull();
+    // Verify feature/report-download provides .md and .txt download buttons that work cleanly
+    const mdDownloadButton = screen.getByRole('button', { name: '.md 다운로드' });
+    const txtDownloadButton = screen.getByRole('button', { name: '.txt 다운로드' });
+    expect(mdDownloadButton).toBeEnabled();
+    expect(txtDownloadButton).toBeEnabled();
+
+    const originalCreateObjectUrl = Object.getOwnPropertyDescriptor(URL, 'createObjectURL');
+    const originalRevokeObjectUrl = Object.getOwnPropertyDescriptor(URL, 'revokeObjectURL');
+    const createObjectUrlMock = vi.fn(() => 'blob:netdoctor-flow-e');
+    const revokeObjectUrlMock = vi.fn();
+    Object.defineProperty(URL, 'createObjectURL', {
+      value: createObjectUrlMock,
+      configurable: true,
+      writable: true,
+    });
+    Object.defineProperty(URL, 'revokeObjectURL', {
+      value: revokeObjectUrlMock,
+      configurable: true,
+      writable: true,
+    });
+    const anchorClickSpy = vi
+      .spyOn(HTMLAnchorElement.prototype, 'click')
+      .mockImplementation(() => {});
+
+    try {
+      await user.click(mdDownloadButton);
+      expect(createObjectUrlMock).toHaveBeenCalledTimes(1);
+      expect(anchorClickSpy).toHaveBeenCalledTimes(1);
+      expect(revokeObjectUrlMock).toHaveBeenCalledWith('blob:netdoctor-flow-e');
+      expect(screen.getByText(/\.md" 파일 다운로드가 시작되었습니다\./)).toBeInTheDocument();
+
+      await user.click(txtDownloadButton);
+      expect(createObjectUrlMock).toHaveBeenCalledTimes(2);
+      expect(anchorClickSpy).toHaveBeenCalledTimes(2);
+      expect(revokeObjectUrlMock).toHaveBeenCalledTimes(2);
+      expect(screen.getByText(/\.txt" 파일 다운로드가 시작되었습니다\./)).toBeInTheDocument();
+      expect(document.querySelector('a[download]')).toBeNull();
+    } finally {
+      if (originalCreateObjectUrl) {
+        Object.defineProperty(URL, 'createObjectURL', originalCreateObjectUrl);
+      } else {
+        delete (URL as unknown as Record<string, unknown>).createObjectURL;
+      }
+      if (originalRevokeObjectUrl) {
+        Object.defineProperty(URL, 'revokeObjectURL', originalRevokeObjectUrl);
+      } else {
+        delete (URL as unknown as Record<string, unknown>).revokeObjectURL;
+      }
+      anchorClickSpy.mockRestore();
+    }
+
+    // Verify deferred advanced diagnosis comparison remains excluded on this branch
     expect(
       screen.queryByRole('button', { name: /진단 비교|결과 비교|비교하기/i })
     ).not.toBeInTheDocument();
-    expect(
-      screen.getByText(/feature\/report-download/)
-    ).toBeInTheDocument();
     expect(
       screen.getByText(/feature\/diagnosis-comparison/)
     ).toBeInTheDocument();
