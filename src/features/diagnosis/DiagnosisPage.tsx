@@ -318,8 +318,9 @@ export function DiagnosisPage({
       diagnosisResult: result,
     });
     if (!saved) {
+      setSavedIncident(null);
       setSaveError(
-        '저장이 차단되었습니다. 비밀번호·토큰 등 민감한 인증정보가 포함되지 않았는지, 입력값이 올바른지 확인해 주세요.'
+        '장애 이력을 저장하지 못했습니다. 비밀번호·토큰 등 민감한 인증정보가 포함되지 않았는지 입력값을 확인하거나, 브라우저 LocalStorage 용량 초과·저장소 접근 제한 상태를 확인해 주세요. 기존 저장 데이터는 손상되지 않았습니다.'
       );
       return;
     }
@@ -1157,7 +1158,7 @@ export function DiagnosisPage({
                 </div>
 
                 {saveError && (
-                  <AlertBanner tone="danger" title="저장 입력 확인" description={saveError} />
+                  <AlertBanner tone="danger" title="장애 이력 저장 실패" description={saveError} />
                 )}
 
                 <div className="flex flex-col gap-3 pt-1 sm:flex-row sm:items-center sm:justify-between">

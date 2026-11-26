@@ -108,11 +108,13 @@ export function loadIncidents(): IncidentRecord[] {
 
 /**
  * Persists validated incident records to LocalStorage.
+ * Returns true only when storage.setItem succeeds; returns false if storage is
+ * unavailable or throws (e.g., QuotaExceededError, SecurityError).
  */
-export function saveIncidents(records: IncidentRecord[]): void {
+export function saveIncidents(records: IncidentRecord[]): boolean {
   const storage = getLocalStorage();
   if (!storage) {
-    return;
+    return false;
   }
 
   try {
@@ -124,8 +126,10 @@ export function saveIncidents(records: IncidentRecord[]): void {
       }
     }
     storage.setItem(STORAGE_KEYS.INCIDENTS, JSON.stringify(validRecords));
+    return true;
   } catch {
-    // Gracefully ignore storage quota or security errors
+    // Gracefully report failure on storage quota, security, or runtime errors
+    return false;
   }
 }
 
@@ -221,7 +225,10 @@ export function createIncidentRecord(input: IncidentCreateInput): IncidentRecord
   };
 
   const existing = loadIncidents();
-  saveIncidents([record, ...existing]);
+  const persisted = saveIncidents([record, ...existing]);
+  if (!persisted) {
+    return null;
+  }
   return record;
 }
 
@@ -355,7 +362,10 @@ export function updateIncidentRecord(
 
   const nextList = [...existingList];
   nextList[targetIndex] = updated;
-  saveIncidents(nextList);
+  const persisted = saveIncidents(nextList);
+  if (!persisted) {
+    return null;
+  }
   return updated;
 }
 
@@ -371,7 +381,10 @@ export function deleteIncidentRecord(id: string): boolean {
   if (next.length === existing.length) {
     return false;
   }
-  saveIncidents(next);
+  const persisted = saveIncidents(next);
+  if (!persisted) {
+    return false;
+  }
   return true;
 }
 
@@ -547,23 +560,31 @@ export function createSampleIncidents(): IncidentRecord[] {
 
 /**
  * Loads sample incidents into LocalStorage without duplicating existing sample IDs.
+ * Returns the previous existing records unchanged if persisting to LocalStorage fails.
  */
 export function loadSampleIncidentsIntoStorage(): IncidentRecord[] {
   const existing = loadIncidents();
   const existingIds = new Set(existing.map((item) => item.id));
   const samplesToAdd = createSampleIncidents().filter((sample) => !existingIds.has(sample.id));
   const merged = [...existing, ...samplesToAdd];
-  saveIncidents(merged);
+  const persisted = saveIncidents(merged);
+  if (!persisted) {
+    return existing;
+  }
   return merged;
 }
 
 /**
  * Removes all sample incidents (isSample === true) from LocalStorage,
  * preserving all real user records.
+ * Returns the previous existing records unchanged if persisting to LocalStorage fails.
  */
 export function clearSampleIncidentsFromStorage(): IncidentRecord[] {
   const existing = loadIncidents();
   const remaining = existing.filter((item) => item.isSample !== true);
-  saveIncidents(remaining);
+  const persisted = saveIncidents(remaining);
+  if (!persisted) {
+    return existing;
+  }
   return remaining;
 }

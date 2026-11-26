@@ -145,6 +145,7 @@ export function HistoryPage({
 
   const [deleteTarget, setDeleteTarget] = useState<IncidentRecord | null>(null);
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const filteredIncidents = useMemo(() => {
     const matched = filterIncidents(incidents, {
@@ -167,6 +168,7 @@ export function HistoryPage({
   function openCreateModal() {
     setFormState(createEmptyFormState());
     setFormError(null);
+    setActionError(null);
     setEditingId(null);
     setModalMode('create');
   }
@@ -174,6 +176,7 @@ export function HistoryPage({
   function openEditModal(record: IncidentRecord) {
     setFormState(createFormStateFromRecord(record));
     setFormError(null);
+    setActionError(null);
     setEditingId(record.id);
     setModalMode('edit');
   }
@@ -249,10 +252,14 @@ export function HistoryPage({
       });
 
       if (!created) {
-        setFormError('장애 이력 저장에 실패했습니다. 입력값과 시간 범위를 다시 확인해 주세요.');
+        setFeedbackMessage(null);
+        setFormError(
+          '장애 이력 저장에 실패했습니다. 입력값·민감 정보 차단 여부 또는 브라우저 LocalStorage 저장소 용량 초과·접근 제한 상태를 확인해 주세요. 기존 데이터는 그대로 유지되었습니다.'
+        );
         return;
       }
 
+      setActionError(null);
       setFeedbackMessage(`신규 장애 이력 "${created.title}"이(가) 저장되었습니다.`);
       closeFormModal();
       return;
@@ -271,10 +278,14 @@ export function HistoryPage({
       });
 
       if (!updated) {
-        setFormError('장애 이력 수정에 실패했습니다. 입력값과 시간 범위를 다시 확인해 주세요.');
+        setFeedbackMessage(null);
+        setFormError(
+          '장애 이력 수정 내용을 저장하지 못했습니다. 입력값·민감 정보 차단 여부 또는 브라우저 LocalStorage 용량 초과·접근 제한 상태를 확인해 주세요. 기존 데이터는 그대로 유지되었습니다.'
+        );
         return;
       }
 
+      setActionError(null);
       setFeedbackMessage(`장애 이력 "${updated.title}"이(가) 업데이트되었습니다.`);
       closeFormModal();
     }
@@ -283,22 +294,35 @@ export function HistoryPage({
   function handleQuickStatusToggle(record: IncidentRecord) {
     const nextStatus: IncidentStatus = record.status === 'resolved' ? 'open' : 'resolved';
     const updated = onUpdateIncident(record.id, { status: nextStatus });
-    if (updated) {
-      setFeedbackMessage(
-        nextStatus === 'resolved'
-          ? `"${updated.title}" 이력을 해결 완료 처리했습니다.`
-          : `"${updated.title}" 이력을 미해결 상태로 재오픈했습니다.`
+    if (!updated) {
+      setFeedbackMessage(null);
+      setActionError(
+        '상태 변경을 LocalStorage에 저장하지 못했습니다. 브라우저 저장소 용량 초과 또는 접근 제한 상태일 수 있으며, 기존 장애 이력 데이터는 그대로 유지되었습니다.'
       );
+      return;
     }
+    setActionError(null);
+    setFeedbackMessage(
+      nextStatus === 'resolved'
+        ? `"${updated.title}" 이력을 해결 완료 처리했습니다.`
+        : `"${updated.title}" 이력을 미해결 상태로 재오픈했습니다.`
+    );
   }
 
   function handleConfirmDelete() {
     if (!deleteTarget) return;
     const deletedTitle = deleteTarget.title;
     const removed = onDeleteIncident(deleteTarget.id);
-    if (removed) {
-      setFeedbackMessage(`"${deletedTitle}" 장애 이력이 삭제되었습니다.`);
+    if (!removed) {
+      setFeedbackMessage(null);
+      setActionError(
+        '장애 이력 삭제를 LocalStorage에 저장하지 못했습니다. 브라우저 저장소 용량 초과 또는 접근 제한 상태일 수 있으며, 기존 데이터는 그대로 유지되었습니다.'
+      );
+      setDeleteTarget(null);
+      return;
     }
+    setActionError(null);
+    setFeedbackMessage(`"${deletedTitle}" 장애 이력이 삭제되었습니다.`);
     setDeleteTarget(null);
   }
 
@@ -348,6 +372,13 @@ export function HistoryPage({
       </div>
       {feedbackMessage && (
         <AlertBanner tone="success" title={feedbackMessage} />
+      )}
+      {actionError && (
+        <AlertBanner
+          tone="danger"
+          title="저장 실패 — 기존 데이터가 유지되었습니다"
+          description={actionError}
+        />
       )}
 
       {/* Search & Filter Bar */}
