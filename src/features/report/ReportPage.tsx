@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Check,
   ClipboardCopy,
+  Download,
   FileCode2,
   FileText,
   History,
@@ -11,6 +12,7 @@ import {
 import { AlertBanner, Badge, Button, Card, EmptyState } from '../../components';
 import {
   computeResolutionMinutes,
+  downloadIncidentReport,
   formatReportTimestamp,
   generateIncidentReport,
   type ReportFormat,
@@ -49,6 +51,11 @@ function getSeverityTone(severity: Severity): ComponentTone {
   }
 }
 
+type DownloadFeedback =
+  | { status: 'idle' }
+  | { status: 'success'; filename: string; format: ReportFormat }
+  | { status: 'error'; message: string };
+
 export function ReportPage({ incidents, initialIncidentId, onOpenHistory }: ReportPageProps) {
   const [selectedId, setSelectedId] = useState<string>(() => {
     if (initialIncidentId && incidents.some((item) => item.id === initialIncidentId)) {
@@ -58,13 +65,50 @@ export function ReportPage({ incidents, initialIncidentId, onOpenHistory }: Repo
   });
   const [format, setFormat] = useState<ReportFormat>('markdown');
   const [copyStatus, setCopyStatus] = useState<'idle' | 'copied' | 'error'>('idle');
+  const [downloadFeedback, setDownloadFeedback] = useState<DownloadFeedback>({ status: 'idle' });
+
+  const copyTimerRef = useRef<number | null>(null);
+  const downloadTimerRef = useRef<number | null>(null);
+  const isMountedRef = useRef(true);
+
+  const clearCopyTimer = useCallback(() => {
+    if (copyTimerRef.current !== null) {
+      window.clearTimeout(copyTimerRef.current);
+      copyTimerRef.current = null;
+    }
+  }, []);
+
+  const clearDownloadTimer = useCallback(() => {
+    if (downloadTimerRef.current !== null) {
+      window.clearTimeout(downloadTimerRef.current);
+      downloadTimerRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      if (copyTimerRef.current !== null) {
+        window.clearTimeout(copyTimerRef.current);
+        copyTimerRef.current = null;
+      }
+      if (downloadTimerRef.current !== null) {
+        window.clearTimeout(downloadTimerRef.current);
+        downloadTimerRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (initialIncidentId && incidents.some((item) => item.id === initialIncidentId)) {
       setSelectedId(initialIncidentId);
+      clearCopyTimer();
+      clearDownloadTimer();
       setCopyStatus('idle');
+      setDownloadFeedback({ status: 'idle' });
     }
-  }, [initialIncidentId, incidents]);
+  }, [initialIncidentId, incidents, clearCopyTimer, clearDownloadTimer]);
 
   useEffect(() => {
     if (incidents.length === 0) {
@@ -81,6 +125,15 @@ export function ReportPage({ incidents, initialIncidentId, onOpenHistory }: Repo
     [incidents, selectedId]
   );
 
+  const selectedIncidentId = selectedIncident?.id ?? '';
+
+  useEffect(() => {
+    clearCopyTimer();
+    clearDownloadTimer();
+    setCopyStatus('idle');
+    setDownloadFeedback({ status: 'idle' });
+  }, [selectedIncidentId, clearCopyTimer, clearDownloadTimer]);
+
   const reportContent = useMemo(() => {
     if (!selectedIncident) {
       return '';
@@ -88,8 +141,12 @@ export function ReportPage({ incidents, initialIncidentId, onOpenHistory }: Repo
     return generateIncidentReport(selectedIncident, format);
   }, [selectedIncident, format]);
 
+  const isReportEmpty = !reportContent.trim();
+
   async function handleCopyReport() {
-    if (!reportContent) return;
+    if (isReportEmpty) return;
+
+    clearCopyTimer();
 
     try {
       if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
@@ -105,11 +162,61 @@ export function ReportPage({ incidents, initialIncidentId, onOpenHistory }: Repo
         document.execCommand('copy');
         document.body.removeChild(textarea);
       }
+      if (!isMountedRef.current) return;
       setCopyStatus('copied');
-      window.setTimeout(() => setCopyStatus('idle'), 3000);
+      copyTimerRef.current = window.setTimeout(() => {
+        setCopyStatus('idle');
+        copyTimerRef.current = null;
+      }, 3000);
     } catch {
+      if (!isMountedRef.current) return;
       setCopyStatus('error');
-      window.setTimeout(() => setCopyStatus('idle'), 3000);
+      copyTimerRef.current = window.setTimeout(() => {
+        setCopyStatus('idle');
+        copyTimerRef.current = null;
+      }, 3000);
+    }
+  }
+
+  function handleDownloadReport(targetFormat: ReportFormat) {
+    clearDownloadTimer();
+
+    if (isReportEmpty) {
+      setDownloadFeedback({
+        status: 'error',
+        message: '다운로드할 보고서 내용이 비어 있습니다.',
+      });
+      return;
+    }
+
+    try {
+      const result = downloadIncidentReport(selectedIncident, targetFormat);
+      if (result.ok) {
+        const filename =
+          result.filename ??
+          (targetFormat === 'markdown' ? 'incident-report.md' : 'incident-report.txt');
+        setDownloadFeedback({
+          status: 'success',
+          filename,
+          format: targetFormat,
+        });
+        downloadTimerRef.current = window.setTimeout(() => {
+          setDownloadFeedback({ status: 'idle' });
+          downloadTimerRef.current = null;
+        }, 3500);
+      } else {
+        setDownloadFeedback({
+          status: 'error',
+          message:
+            result.error ||
+            '보고서 파일 다운로드에 실패했습니다. 잠시 후 다시 시도해 주세요.',
+        });
+      }
+    } catch {
+      setDownloadFeedback({
+        status: 'error',
+        message: '브라우저 환경에서 파일 다운로드를 시작하지 못했습니다.',
+      });
     }
   }
 
@@ -148,15 +255,15 @@ export function ReportPage({ incidents, initialIncidentId, onOpenHistory }: Repo
       {/* Header */}
       <div className="flex flex-col gap-4 rounded-xl border border-navy-700/80 bg-navy-850/90 p-5 shadow-card sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-xl font-bold tracking-tight text-slate-100 sm:text-2xl">
               장애 보고서 생성
             </h1>
             <Badge tone="cyan">6대 필수 항목 자동 정리</Badge>
           </div>
           <p className="mt-1 text-sm text-slate-400">
-            선택한 장애 이력을 사내 공유 및 헬프데스크 티켓 첨부에 적합한 Markdown 또는 일반 텍스트
-            보고서로 생성하고 클립보드에 복사합니다.
+            선택한 장애 이력을 사내 공유 및 헬프데스크 티켓 첨부에 적합한 Markdown(.md) 또는 일반
+            텍스트(.txt) 보고서로 생성하고 클립보드 복사 및 파일 다운로드로 저장합니다.
           </p>
         </div>
         <Button
@@ -172,14 +279,14 @@ export function ReportPage({ incidents, initialIncidentId, onOpenHistory }: Repo
       {/* Scope / Git Branch Roadmap Note (Section 10) */}
       <AlertBanner
         tone="cyan"
-        title="확장 기능 브랜치 로드맵 안내"
-        description="장애 보고서 파일 다운로드(feature/report-download)와 고급 진단 결과 비교(feature/diagnosis-comparison) 기능은 별도 feature 브랜치에서 추가 예정입니다. 현재 버전에서는 보고서 미리보기와 클립보드 복사 기능을 제공합니다."
+        title="보고서 내보내기 및 확장 로드맵 안내"
+        description="현재 버전에서는 보고서 미리보기, 클립보드 복사, Markdown(.md) 및 일반 텍스트(.txt) 파일 다운로드 기능을 제공합니다. 고급 진단 결과 비교(feature/diagnosis-comparison) 기능은 추후 별도 feature 브랜치에서 추가 예정입니다."
       />
 
       {/* Selector & Format Controls */}
       <Card>
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div className="flex-1 space-y-1.5">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+          <div className="min-w-0 flex-1 space-y-1.5">
             <label htmlFor="report-incident-select" className="block text-xs font-semibold text-slate-300">
               보고서 대상 장애 이력 선택
             </label>
@@ -188,7 +295,10 @@ export function ReportPage({ incidents, initialIncidentId, onOpenHistory }: Repo
               value={selectedIncident.id}
               onChange={(e) => {
                 setSelectedId(e.target.value);
+                clearCopyTimer();
+                clearDownloadTimer();
                 setCopyStatus('idle');
+                setDownloadFeedback({ status: 'idle' });
               }}
               className="w-full rounded-lg border border-navy-700 bg-navy-900 px-3 py-2.5 text-sm text-slate-100 focus:border-cyanbrand-400 focus:outline-none"
             >
@@ -202,20 +312,21 @@ export function ReportPage({ incidents, initialIncidentId, onOpenHistory }: Repo
             </select>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-center xl:shrink-0">
             <div
               role="group"
               aria-label="보고서 출력 형식 선택"
-              className="inline-flex rounded-lg border border-navy-700 bg-navy-900 p-1"
+              className="inline-flex w-full rounded-lg border border-navy-700 bg-navy-900 p-1 sm:w-auto"
             >
               <button
                 type="button"
                 onClick={() => {
                   setFormat('markdown');
+                  clearCopyTimer();
                   setCopyStatus('idle');
                 }}
                 aria-pressed={format === 'markdown'}
-                className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
+                className={`inline-flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors sm:flex-initial ${
                   format === 'markdown'
                     ? 'bg-cyanbrand-500/20 text-cyanbrand-300'
                     : 'text-slate-400 hover:text-slate-200'
@@ -228,10 +339,11 @@ export function ReportPage({ incidents, initialIncidentId, onOpenHistory }: Repo
                 type="button"
                 onClick={() => {
                   setFormat('text');
+                  clearCopyTimer();
                   setCopyStatus('idle');
                 }}
                 aria-pressed={format === 'text'}
-                className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
+                className={`inline-flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors sm:flex-initial ${
                   format === 'text'
                     ? 'bg-cyanbrand-500/20 text-cyanbrand-300'
                     : 'text-slate-400 hover:text-slate-200'
@@ -242,25 +354,70 @@ export function ReportPage({ incidents, initialIncidentId, onOpenHistory }: Repo
               </button>
             </div>
 
-            <Button
-              variant="primary"
-              size="md"
-              onClick={handleCopyReport}
-              leftIcon={
-                copyStatus === 'copied' ? (
-                  <Check className="h-4 w-4" />
-                ) : (
-                  <ClipboardCopy className="h-4 w-4" />
-                )
-              }
-            >
-              {copyStatus === 'copied' ? '복사 완료' : '보고서 복사'}
-            </Button>
+            <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:items-center">
+              <Button
+                variant="primary"
+                size="md"
+                onClick={handleCopyReport}
+                className="w-full sm:w-auto"
+                leftIcon={
+                  copyStatus === 'copied' ? (
+                    <Check className="h-4 w-4" />
+                  ) : (
+                    <ClipboardCopy className="h-4 w-4" />
+                  )
+                }
+              >
+                {copyStatus === 'copied' ? '복사 완료' : '보고서 복사'}
+              </Button>
+
+              <div
+                role="group"
+                aria-label="보고서 파일 다운로드"
+                className="grid grid-cols-2 gap-2 sm:flex sm:items-center"
+              >
+                <Button
+                  variant="secondary"
+                  size="md"
+                  onClick={() => handleDownloadReport('markdown')}
+                  disabled={isReportEmpty}
+                  title="Markdown(.md) 파일로 다운로드"
+                  className="w-full border-cyan-500/35 text-cyan-200 hover:border-cyan-400/60 hover:text-cyan-100 sm:w-auto"
+                  leftIcon={
+                    downloadFeedback.status === 'success' &&
+                    downloadFeedback.format === 'markdown' ? (
+                      <Check className="h-4 w-4 text-emerald-400" />
+                    ) : (
+                      <Download className="h-4 w-4 text-cyan-400" />
+                    )
+                  }
+                >
+                  .md 다운로드
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="md"
+                  onClick={() => handleDownloadReport('text')}
+                  disabled={isReportEmpty}
+                  title="일반 텍스트(.txt) 파일로 다운로드"
+                  className="w-full border-cyan-500/35 text-cyan-200 hover:border-cyan-400/60 hover:text-cyan-100 sm:w-auto"
+                  leftIcon={
+                    downloadFeedback.status === 'success' && downloadFeedback.format === 'text' ? (
+                      <Check className="h-4 w-4 text-emerald-400" />
+                    ) : (
+                      <Download className="h-4 w-4 text-cyan-400" />
+                    )
+                  }
+                >
+                  .txt 다운로드
+                </Button>
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* Accessible Clipboard Status Notification */}
-        <div aria-live="polite" className="mt-3 min-h-[1.25rem]">
+        {/* Accessible Clipboard & Download Status Notifications */}
+        <div aria-live="polite" className="mt-3 min-h-[1.25rem] space-y-1">
           {copyStatus === 'copied' && (
             <p className="text-xs font-medium text-emerald-400">
               {format === 'markdown' ? 'Markdown' : '일반 텍스트'} 형식의 장애 보고서가 클립보드에
@@ -273,7 +430,21 @@ export function ReportPage({ incidents, initialIncidentId, onOpenHistory }: Repo
               주세요.
             </p>
           )}
+          {downloadFeedback.status === 'success' && (
+            <p className="text-xs font-medium text-emerald-400">
+              &quot;{downloadFeedback.filename}&quot; 파일 다운로드가 시작되었습니다.
+            </p>
+          )}
         </div>
+
+        {downloadFeedback.status === 'error' && (
+          <AlertBanner
+            tone="danger"
+            title="보고서 파일 다운로드에 실패했습니다"
+            description={downloadFeedback.message}
+            className="mt-3"
+          />
+        )}
       </Card>
 
       {/* Visual Structured Summary + Raw Report Preview */}
@@ -408,7 +579,7 @@ export function ReportPage({ incidents, initialIncidentId, onOpenHistory }: Repo
         {/* Safe Plain Text / Markdown Preview (ZERO dangerouslySetInnerHTML) */}
         <Card
           title={format === 'markdown' ? 'Markdown 보고서 미리보기' : '일반 텍스트 보고서 미리보기'}
-          subtitle="안전한 텍스트 렌더링으로 XSS 없이 원본 포맷 그대로 확인·복사할 수 있습니다."
+          subtitle="안전한 텍스트 렌더링으로 XSS 없이 원본 포맷 그대로 확인·복사·다운로드할 수 있습니다."
           className="xl:col-span-7"
           headerAction={
             <span className="inline-flex items-center gap-1 text-xs text-emerald-400">
