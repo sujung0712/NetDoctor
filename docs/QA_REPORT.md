@@ -122,5 +122,43 @@
 
 1. **실제 브라우저 시각적·레이아웃 E2E 검증**: Chromium/Edge/Firefox 등 실제 브라우저 엔진에서의 픽셀 단위 반응형 레이아웃(모바일·태블릿·데스크톱), Recharts 차트 실제 SVG 크기 렌더링, 툴팁 호버 상호작용 및 키보드 포커스 시각적 대비는 jsdom 기반 자동화 테스트로 대체되었으며 실제 브라우저 E2E(Browser QA Agent)는 수행하지 않았습니다.
 2. **실제 Windows OS 네트워크 환경 CLI 실행 검증**: 명령어 가이드의 `ipconfig /all`, `ping`, `nslookup`, `tracert`, `Test-NetConnection` 예시는 Microsoft Learn 공식 문서 기준 읽기 전용 구문과 샘플 출력으로 검증되었으며, 다양한 실제 사내망/VPN/방화벽 환경의 Windows 터미널에서 직접 실행해 출력 파싱을 교차 검증하지는 않았습니다.
-3. **Node.js 20 런타임 직접 실행 검증**: `package.json`의 `engines`는 `>=20.0.0 <25.0.0`으로 설정되어 있으나, 본 검증은 **Node.js `v24.22.2`** 환경에서만 직접 실행되었으며 Node.js 20.x 런타임에서의 별도 실행 테스트는 수행하지 않았습니다.
+3. **Node.js 20 런타임 직접 실행 및 GitHub Actions CI 원격 실행 검증**: `package.json`의 `engines`는 `>=20.0.0 <25.0.0`이며 `.github/workflows/ci.yml`에 Node.js 20 및 24 매트릭스를 구성했으나, 로컬 검증은 **Node.js `v24.22.2`** 환경에서만 직접 실행되었고 **GitHub Actions(Node 20 & 24) 원격 워크플로 실행은 GitHub Push 이후 확인 예정(미실행)**입니다.
 4. **향후 확장 기능 브랜치 (`feature/report-download`, `feature/diagnosis-comparison`)**: 베이스 버전 범위 밖의 예정 기능이므로 해당 기능의 구현 및 동작 검증은 각 feature 브랜치 개발 단계에서 별도로 수행해야 합니다.
+
+---
+
+## 7. Stitch 보완(`7c5b245`) 이후 최종 회귀 테스트 및 CI 사전 검증 (GitHub 업로드 전)
+
+- **실행 일시**: 2026-11-26
+- **기준 브랜치 / 커밋**: `develop` (`7c5b245` 이후 `.gitignore`, `.github/workflows/ci.yml`, `README.md` 반영 상태)
+- **실행 환경**: Windows, Node.js `v24.22.2`, npm `11.19.1`
+
+### 7.1 클린 설치 및 회귀 테스트 실제 실행 결과
+
+| 검증 명령어 | 결과 | 실제 출력 요약 |
+| :--- | :---: | :--- |
+| `npm ci` | **PASS** | `added 376 packages, and audited 377 packages in 10s` (종료 코드 `0`; 로컬 `vite.js` 잠금 해제 후 재실행 통과) |
+| `npm run test` | **PASS** | **4개 테스트 파일 / 47/47 테스트 통과** (`11.48s`: `engine.test.ts` 17, `diagnosis-accuracy.test.ts` 17, `security-xss.test.tsx` 8, `integration.test.tsx` 5) |
+| `npm run lint` | **PASS** | 오류 `0건`, 경고 `0건` (종료 코드 `0`) |
+| `npx tsc --noEmit -p tsconfig.app.json` | **PASS** | 타입 오류 `0건` (종료 코드 `0`) |
+| `npm run build` | **PASS** | `tsc -b && vite build` 성공 (`2210 modules transformed`, `6.25s`, `dist/index.html` 0.53 kB, CSS 34.05 kB, JS 707.20 kB / gzip 213.76 kB) |
+
+### 7.2 보안 검사 결과 (현재 파일 + 전체 Git 커밋 7건 이력 스캔)
+
+| 점검 항목 | 검사 대상 | 결과 | 상세 확인 내용 |
+| :--- | :--- | :---: | :--- |
+| **Google API Key (`AIza...`)** | 워크스페이스 전체 + Git 7커밋 | **이상 없음 (0건)** | 탐지 없음 |
+| **GitHub PAT (`ghp_`, `github_pat_` 등)** | 워크스페이스 전체 + Git 7커밋 | **이상 없음 (0건)** | 탐지 없음 |
+| **MCP 인증정보 / API Key / Bearer 토큰** | 워크스페이스 전체 + Git 7커밋 | **이상 없음 (0건)** | 실제 토큰 0건 (`.gitignore` 제외 규칙명과 `security-xss.test.tsx` 차단 단위 테스트 더미 문자열만 존재) |
+| **VPN 계정 / 비밀번호 / 개인키** | 워크스페이스 전체 + Git 7커밋 | **이상 없음 (0건)** | 실제 자격증명 0건 (`security-xss.test.tsx` 차단 검증용 가상 문자열 및 `QA_REPORT.md`/`README.md` 차단 규칙 설명만 존재) |
+| **실제 회사 내부 네트워크 정보** | 워크스페이스 전체 + Git 7커밋 | **이상 없음 (0건)** | 프로덕션 코드는 RFC 예시 주소(`example.com`, `192.0.2.1`, `8.8.8.8`, `127.0.0.1`)만 사용 (`DESIGN.md` 내 Stitch 목업 배제 사유 기록만 존재) |
+| **`.env` 파일 존재 여부** | 워크스페이스 + Git 추적 파일 | **이상 없음 (0건)** | 추적/비추적 `.env*` 파일 없음 |
+| **`.gitignore` 필수 제외 항목** | `.gitignore` | **PASS** | `node_modules/`, `dist/`, `*.tsbuildinfo`, `.env`, `.env.*`, MCP 설정 파일(`.mcp.json`, `mcp.json`, `mcp_config.json`, `*.mcp.json`, `.cursor/mcp.json`, `.antigravity/mcp*.json`) 제외 확인 |
+| **Git 추적 불필요 파일 점검** | `git ls-files` (59개 파일) | **PASS** | `node_modules/`, `dist/`, `*.tsbuildinfo`, `.env`, 로그/임시 파일 추적 0건 |
+
+### 7.3 GitHub Actions CI 구성 상태 (`.github/workflows/ci.yml`)
+- **트리거**: `push` (`main`, `develop`, `feature/**`, `feat/**`), `pull_request` (`main`, `develop`)
+- **최소 권한**: `permissions: contents: read` (외부 API Key 및 Secret 불필요)
+- **매트릭스**: `ubuntu-latest`, `node-version: [20, 24]`, `cache: 'npm'`
+- **검증 단계**: `npm ci` → `npm run test` → `npm run lint` → `npx tsc --noEmit -p tsconfig.app.json` → `npm run build`
+- **실행 상태**: **미실행 (Pending — GitHub Push 이후 원격 Actions 탭에서 Node 20 & 24 매트릭스 결과 확인 예정)**
