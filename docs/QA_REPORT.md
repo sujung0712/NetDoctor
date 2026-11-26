@@ -122,7 +122,7 @@
 
 1. **실제 브라우저 시각적·레이아웃 E2E 검증**: Chromium/Edge/Firefox 등 실제 브라우저 엔진에서의 픽셀 단위 반응형 레이아웃(모바일·태블릿·데스크톱), Recharts 차트 실제 SVG 크기 렌더링, 툴팁 호버 상호작용 및 키보드 포커스 시각적 대비는 jsdom 기반 자동화 테스트로 대체되었으며 실제 브라우저 E2E(Browser QA Agent)는 수행하지 않았습니다.
 2. **실제 Windows OS 네트워크 환경 CLI 실행 검증**: 명령어 가이드의 `ipconfig /all`, `ping`, `nslookup`, `tracert`, `Test-NetConnection` 예시는 Microsoft Learn 공식 문서 기준 읽기 전용 구문과 샘플 출력으로 검증되었으며, 다양한 실제 사내망/VPN/방화벽 환경의 Windows 터미널에서 직접 실행해 출력 파싱을 교차 검증하지는 않았습니다.
-3. **Node.js 20 런타임 직접 실행 및 GitHub Actions CI 원격 실행 검증**: `package.json`의 `engines`는 `>=20.0.0 <25.0.0`이며 `.github/workflows/ci.yml`에 Node.js 20 및 24 매트릭스를 구성했으나, 로컬 검증은 **Node.js `v24.22.2`** 환경에서만 직접 실행되었고 **GitHub Actions(Node 20 & 24) 원격 워크플로 실행은 GitHub Push 이후 확인 예정(미실행)**입니다.
+3. **업데이트된 CI 워크플로(`@v7`) 재실행 확인**: PR #1(`98e91ea`)의 원격 GitHub Actions에서 **Node.js 20 및 Node.js 24 매트릭스 테스트 모두 성공(PASS)**을 실제 확인했으나, `actions/checkout@v7`·`actions/setup-node@v7` 업그레이드 이후 Node.js 20 deprecation 경고 소멸 여부는 다음 GitHub Push 이후 원격 CI 재실행에서 최종 확인할 예정입니다.
 4. **향후 확장 기능 브랜치 (`feature/report-download`, `feature/diagnosis-comparison`)**: 베이스 버전 범위 밖의 예정 기능이므로 해당 기능의 구현 및 동작 검증은 각 feature 브랜치 개발 단계에서 별도로 수행해야 합니다.
 
 ---
@@ -156,9 +156,21 @@
 | **`.gitignore` 필수 제외 항목** | `.gitignore` | **PASS** | `node_modules/`, `dist/`, `*.tsbuildinfo`, `.env`, `.env.*`, MCP 설정 파일(`.mcp.json`, `mcp.json`, `mcp_config.json`, `*.mcp.json`, `.cursor/mcp.json`, `.antigravity/mcp*.json`) 제외 확인 |
 | **Git 추적 불필요 파일 점검** | `git ls-files` (59개 파일) | **PASS** | `node_modules/`, `dist/`, `*.tsbuildinfo`, `.env`, 로그/임시 파일 추적 0건 |
 
-### 7.3 GitHub Actions CI 구성 상태 (`.github/workflows/ci.yml`)
-- **트리거**: `push` (`main`, `develop`, `feature/**`, `feat/**`), `pull_request` (`main`, `develop`)
-- **최소 권한**: `permissions: contents: read` (외부 API Key 및 Secret 불필요)
-- **매트릭스**: `ubuntu-latest`, `node-version: [20, 24]`, `cache: 'npm'`
-- **검증 단계**: `npm ci` → `npm run test` → `npm run lint` → `npx tsc --noEmit -p tsconfig.app.json` → `npm run build`
-- **실행 상태**: **미실행 (Pending — GitHub Push 이후 원격 Actions 탭에서 Node 20 & 24 매트릭스 결과 확인 예정)**
+### 7.3 GitHub Actions CI 원격 실행 결과 및 Node.js 20 Deprecation 경고 해결
+
+- **PR #1 (`98e91ea`) 원격 CI 실제 실행 결과 (GitHub MCP `pull_request_read` `get_check_runs` 조회)**:
+  - **Push CI (`run 45764388000`)**:
+    - `Verify (Node 20)` (`job 139721664953`): **PASS (`success`)** (`05:52:21Z` → `05:53:35Z`)
+    - `Verify (Node 24)` (`job 139721664516`): **PASS (`success`)** (`05:52:20Z` → `05:53:40Z`)
+  - **Pull Request #1 CI (`run 45764471975`, 전체 실행 시간 1분 26초)**:
+    - `Verify (Node 20)` (`job 139721945617`): **PASS (`success`)** (`05:53:10Z` → `05:54:34Z`)
+    - `Verify (Node 24)` (`job 139721945333`): **PASS (`success`)** (`05:53:10Z` → `05:54:04Z`)
+- **발견된 CI 경고(Annotations 2건) 및 원인 분석**:
+  - 경고 내용: GitHub Actions JavaScript 액션 런타임의 **Node.js 20 지원 중단(deprecated) 경고 2건** 발생 (참고: GitHub MCP `get_check_runs`는 개별 Annotation 본문 필드를 반환하지 않으나, 공식 저장소 `action.yml` 직접 조회로 원인 확정).
+  - 원인 확인 (`github.get_file_contents`): `.github/workflows/ci.yml`에 사용된 `actions/checkout@v4`(`runs.using: node20`) 및 `actions/setup-node@v4`(`runs.using: 'node20'`)가 구형 Actions Node 20 런타임을 지정하고 있었음.
+- **조치 내역 (`.github/workflows/ci.yml`)**:
+  - GitHub 공식 최신 안정 릴리스(`github.get_latest_release` 및 `action.yml` 확인) 기준으로 업그레이드:
+    - `actions/checkout@v4` → **`actions/checkout@v7`** (`v7.0.1`, `runs.using: node24`)
+    - `actions/setup-node@v4` → **`actions/setup-node@v7`** (`v7.1.0`, `runs.using: 'node24'`)
+  - 애플리케이션 테스트 매트릭스(`node-version: [20, 24]`), `cache: 'npm'`, 최소 권한(`permissions: contents: read`), 외부 Secret 미사용 원칙은 그대로 유지.
+- **업그레이드 후 원격 재검증 상태**: **Push 대기 중** (다음 `develop` Push 후 PR #1 CI에서 2건의 deprecation 경고 해소 여부 최종 확인 예정).
