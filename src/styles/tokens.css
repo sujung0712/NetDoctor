@@ -1,0 +1,23 @@
+:root {
+  /* Dark Navy & Cyan IT Tech Support SaaS Palette */
+  --nd-bg-canvas: #0b1220;
+  --nd-bg-sidebar: #070d1a;
+  --nd-bg-surface: #111b2e;
+  --nd-bg-surface-elevated: #162238;
+  --nd-bg-terminal: #060b14;
+
+  --nd-border-subtle: rgba(148, 163, 184, 0.14);
+  --nd-border-strong: rgba(56, 189, 248, 0.3);
+
+  --nd-cyan-primary: #06b6d4;
+  --nd-cyan-bright: #22d3ee;
+  --nd-cyan-soft: rgba(6, 182, 212, 0.14);
+
+  --nd-text-primary: #f1f5f9;
+  --nd-text-secondary: #cbd5e1;
+  --nd-text-muted: #94a3b8;
+
+  --nd-status-success: #10b981;
+  --nd-status-warning: #f59e0b;
+  --nd-status-danger: #f43f5e;
+}
