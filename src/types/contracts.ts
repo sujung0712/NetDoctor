@@ -90,7 +90,7 @@ export interface DashboardPageProps {
 }
 
 export interface DiagnosisPageProps {
-  onSaveIncident: (input: IncidentCreateInput) => IncidentRecord;
+  onSaveIncident: (input: IncidentCreateInput) => IncidentRecord | null;
   onOpenCommandGuide: (commandId: CommandId) => void;
   onOpenHistory: () => void;
   onOpenReport: (incidentId: string) => void;

@@ -1,11 +1,25 @@
-# Dependencies & build
+# Dependencies & build outputs
 node_modules/
 dist/
 dist-ssr/
 coverage/
 *.local
+*.tsbuildinfo
 
-# Editor & OS
+# Environment variables & secrets
+.env
+.env.*
+!.env.example
+
+# MCP configuration & local credentials
+.mcp.json
+mcp.json
+mcp_config.json
+*.mcp.json
+.cursor/mcp.json
+.antigravity/mcp*.json
+
+# Editor & OS artifacts
 .vscode/*
 !.vscode/extensions.json
 .DS_Store

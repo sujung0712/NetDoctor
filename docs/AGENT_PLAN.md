@@ -516,3 +516,26 @@ flowchart TD
 3. **Phase 2 실행 (실제 병렬 Subagent 3개 동시 호출)**: Agent A, Agent B, Agent C 동시 투입(`workspace: "share"`).
 4. **Phase 3 실행 (Orchestrator)**: 소유권 diff 검증 -> B -> A -> C 순차 병합 -> `src/App.tsx` 통합 연결.
 5. **Phase 4 실행 (QA Agent)**: 테스트 스위트 작성 및 4대 품질 게이트(`tsc`, `lint`, `test`, `build`) 통과 확인.
+
+---
+
+## 10. PR #1 이후 후속 Feature 브랜치 백로그 (PR #1 코드 리뷰 기반)
+
+> **기준 시점**: 베이스 버전(PR #1) 안정화 완료 이후  
+> 아래 항목은 베이스 버전 릴리스 차단 사유가 아닌(non-blocking) 후속 기능 및 코드 품질 개선 과제이며, 별도 Feature 브랜치에서 순차 구현합니다.
+
+### 10.1 계획된 후속 Feature 브랜치 (베이스 버전 미구현)
+
+| 브랜치명 | 목표 기능 | 주요 범위 및 기술 보강 사항 |
+| :--- | :--- | :--- |
+| `feature/report-download` | **장애 보고서 파일 다운로드 (`.md` / `.txt`)** | 보고서 미리보기 화면에서 구조화된 Markdown(`.md`) 및 일반 텍스트(`.txt`) 포맷으로 안전한 클라이언트 사이드 파일 다운로드 제공 |
+| `feature/diagnosis-comparison` | **고급 진단 결과 비교 기능** | 복수 진단 세션/이력 간 원인 후보·신뢰도·근거 비교 UI 구현 및 `src/storage/sanitizer.ts` 내 `diagnosisResult` 내부 필드 심층 스키마 검증(`validateDiagnosisResult`) 보강 |
+
+### 10.2 PR #1 코드 리뷰 경미 개선 백로그 (Non-Blocking)
+
+| 대상 파일 | 개선 항목 | 기대 효과 |
+| :--- | :--- | :--- |
+| `src/engine/evaluator.ts` (`computeSuggestedSeverity`) | `VPN_FAILURE` 중복 분기 단순화 및 근거 미확정 케이스의 심각도 산출 로직 정교화 | 심각도 판정 가독성 향상 및 엣지 케이스 예측 가능성 개선 |
+| `src/features/report/ReportPage.tsx` | 클립보드 복사 피드백 상태용 `setTimeout` 타이머의 컴포넌트 언마운트 시 클린업(`useEffect` / `useRef`) 추가 | 빠른 화면 전환 시 메모리 누수 및 언마운트 후 상태 업데이트 방지 |
+| `src/components/ui.tsx` 외 공통 UI | `src/components/ui.tsx` 재수출 래퍼 정리 및 `getStatusTone` / `getSeverityTone` 공통 유틸 추출 | 상태·심각도 배지 톤 매핑 중복 제거 및 컴포넌트 export 구조 단순화 |
+| `vite.config.ts` | `recharts` 벤더 모듈을 `build.rollupOptions.output.manualChunks`로 분리 | 메인 앱 번들 크기 절감 및 브라우저 캐시 효율(번들 청크) 최적화 |
