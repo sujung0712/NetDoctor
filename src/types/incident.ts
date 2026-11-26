@@ -77,3 +77,12 @@ export interface DashboardStats {
   recentIncidents: IncidentRecord[];
   sampleCount: number;
 }
+
+export type ReportFormat = 'markdown' | 'text';
+
+export interface ReportDownloadResult {
+  ok: boolean;
+  filename?: string;
+  byteLength?: number;
+  error?: string;
+}
